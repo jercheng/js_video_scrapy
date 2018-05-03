@@ -4,7 +4,14 @@ import requests
 import re
 import json
 
+
 def get_video_type(video_name):
+    res = re.findall(r'-(.*)-', video_name)
+    if len(res):
+        return res[0]
+
+    else:
+        return None
 
 
 def get_greater_30(v_id):
@@ -30,9 +37,9 @@ def main():
     for item in res:
         re_json = get_greater_30(item[1])
         if not re_json:
-            print("error: ",item[0])
+            print("error: ", item[0])
         else:
-            print(item[0],re_json)
+            print(item[0], re_json)
 
     mc.close()
 
