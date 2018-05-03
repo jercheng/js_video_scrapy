@@ -4,8 +4,6 @@ from sshtunnel import SSHTunnelForwarder
 
 class MysqlConnect:
     def __init__(self, config):
-
-
         self.server = SSHTunnelForwarder(
             ssh_address_or_host=(config["ssh_host"], config["ssh_port"]),
             ssh_password=config["ssh_pwd"],
@@ -14,7 +12,6 @@ class MysqlConnect:
         )
 
         self.server.start()
-
 
         self.client = pymysql.connect(host='127.0.0.1',
                                       port=self.server.local_bind_port,
