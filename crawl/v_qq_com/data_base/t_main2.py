@@ -3,12 +3,15 @@ from s_config import config
 import requests
 import re
 import json
+import csv
 
 
 def get_video_type(video_name):
-    res = re.findall(r'-(.*)-', video_name)
+    res = re.findall(r'-(.*)-|_(.*)_', video_name)
     if len(res):
-        return res[0]
+        for item in res[0]:
+            if item:
+                return item
 
     else:
         return None
@@ -29,9 +32,13 @@ def get_greater_30(v_id):
 
 
 def main():
+    video_time = "20180425"
     mc = MysqlConnect(config)
-
-    sql = """select detail_title,detail_pid from tx_jieshaoye where  update_date = '20180425' and episodes > 30"""
+    csv_file_1 = open(video_time + '_video_greater_30.csv', 'w', newline='', encoding="utf-8")
+    csv_writer_1 = csv.writer(csv_file_1)
+    csv_file_2 = open(video_time + '_video_type.csv', 'w', newline='', encoding="utf-8")
+    csv_writer_2 = csv.writer(csv_file_2)
+    sql = """select detail_title,detail_pid from tx_jieshaoye where  update_date = """ + video_time + """ and episodes > 30"""
 
     res = mc.exec_query(sql)
     for item in res:
@@ -39,8 +46,21 @@ def main():
         if not re_json:
             print("error: ", item[0])
         else:
-            print(item[0], re_json)
+            csv_writer_2.writerow([item[0], get_video_type(item[0])])
+            for ep_item in re_json:
+                # print(item[0], get_video_type(item[0]), re_json)
+                # if "番外" in ep_item['episode_number'] or int(ep_item['episode_number']) > 30:
+                #     print(ep_item['title'], ep_item['playUrl'], ep_item['episode_number'])
+                has_no_num = re.findall(r"[^\d]+", ep_item['episode_number'])
+                if len(has_no_num) or int(ep_item['episode_number']) > 30:
+                    # print(ep_item['title'], ep_item['playUrl'])
+                    if len(has_no_num):
+                        csv_writer_1.writerow([item[0] + ep_item['title'], ep_item['playUrl']])
+                    else:
+                        csv_writer_1.writerow([ep_item['title'], ep_item['playUrl']])
 
+    csv_file_1.close()
+    csv_file_2.close()
     mc.close()
 
 
