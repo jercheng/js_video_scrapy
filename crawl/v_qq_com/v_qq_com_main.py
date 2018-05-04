@@ -22,6 +22,8 @@ def main():
     # temp_id = "sx5xljydk45g1pp"
     v_id = "7casb7nes159mrl"
     temp_id = "00v79tmuo39v1va"
+    temp_id = "s2fo606divlys5k"
+    temp_id = "uv56axs1nx33hmc"
     res = get_greater_30(temp_id)
 
     for item in res:
