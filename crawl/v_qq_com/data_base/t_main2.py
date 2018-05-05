@@ -45,13 +45,13 @@ def get_greater_30(v_id,error_file):
 
 
 def main():
-    video_time = "20180503"
+    video_time = "20180505"
     mc = MysqlConnect(config)
     csv_file_1 = open('data/'+video_time + '_video_greater_30.csv', 'w', newline='', encoding="utf-8")
     csv_writer_1 = csv.writer(csv_file_1)
     csv_file_2 = open('data/'+video_time + '_video_type.csv', 'w', newline='', encoding="utf-8")
     csv_writer_2 = csv.writer(csv_file_2)
-    error_file = open('data/'+'error_item','a',encoding='utf-8')
+    error_file = open('data/'+video_time+'error_item','a',encoding='utf-8')
     sql = """select detail_title,detail_pid from tx_jieshaoye where  update_date = """ + video_time + """ and episodes > 30"""
 
     res = mc.exec_query(sql)

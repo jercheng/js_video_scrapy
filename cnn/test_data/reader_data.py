@@ -1,10 +1,27 @@
 from collections import namedtuple
 import os
 import numpy as np
+import tensorflow as tf
 
 raw_example = namedtuple('RawExample', 'label entity1 entity2 sentence')
 position_pair = namedtuple('PosPair', 'first last')
 PAD_WORD = "<pad>"
+
+
+def map_words_to_id(raw_data, word2id):
+    '''inplace convert sentence from a list of words to a list of ids
+    Args:
+      raw_data: a list of Raw_Example
+      word2id: dict, {word: id, ...}
+    '''
+    pad_id = word2id[PAD_WORD]
+    for raw_example in raw_data:
+        for idx, word in enumerate(raw_example.sentence):
+            raw_example.sentence[idx] = word2id[word]
+
+        # pad the sentence to FLAGS.max_len
+        pad_n = 96 - len(raw_example.sentence)
+        raw_example.sentence.extend(pad_n * [pad_id])
 
 
 def maybe_trim_embeddings(vocab_file,
@@ -82,13 +99,177 @@ def load_raw_data(file_name):
             entity2 = position_pair(int(words[3]), int(words[4]))
 
             example = raw_example(label, entity1, entity2, sent)
-            print(example)
+            # print(example)
             data.append(example)
 
     return data
 
 
-def main():
+def _lexical_feature(raw_example):
+    def _entity_context(e_idx, sent):
+        ''' return [w(e-1), w(e), w(e+1)]
+        '''
+        context = []
+        context.append(sent[e_idx])
+
+        if e_idx >= 1:
+            context.append(sent[e_idx - 1])
+        else:
+            context.append(sent[e_idx])
+
+        if e_idx < len(sent) - 1:
+            context.append(sent[e_idx + 1])
+        else:
+            context.append(sent[e_idx])
+
+        return context
+
+    e1_idx = raw_example.entity1.first
+    e2_idx = raw_example.entity2.first
+
+    context1 = _entity_context(e1_idx, raw_example.sentence)
+    context2 = _entity_context(e2_idx, raw_example.sentence)
+
+    # ignore WordNet hypernyms in paper
+    lexical = context1 + context2
+    return lexical
+
+
+def _position_feature(raw_example):
+    def distance(n):
+        '''convert relative distance to positive number
+        -60), [-60, 60], (60
+        '''
+        # FIXME: FLAGS.pos_num
+        if n < -60:
+            return 0
+        elif n >= -60 and n <= 60:
+            return n + 61
+
+        return 122
+
+    e1_idx = raw_example.entity1.first
+    e2_idx = raw_example.entity2.first
+
+    position1 = []
+    position2 = []
+    length = len(raw_example.sentence)
+    for i in range(length):
+        position1.append(distance(i - e1_idx))
+        position2.append(distance(i - e2_idx))
+
+    return position1, position2
+
+
+def build_sequence_example(raw_example):
+    '''build tf.train.SequenceExample from Raw_Example
+    context features : lexical, rid, direction (mtl)
+    sequence features: sentence, position1, position2
+
+    Args:
+      raw_example : type Raw_Example
+
+    Returns:
+      tf.trian.SequenceExample
+    '''
+    ex = tf.train.SequenceExample()
+
+    lexical = _lexical_feature(raw_example)
+    ex.context.feature['lexical'].int64_list.value.extend(lexical)
+
+    rid = raw_example.label
+    ex.context.feature['rid'].int64_list.value.append(rid)
+
+    for word_id in raw_example.sentence:
+        word = ex.feature_lists.feature_list['sentence'].feature.add()
+        word.int64_list.value.append(word_id)
+
+    position1, position2 = _position_feature(raw_example)
+    for pos_val in position1:
+        pos = ex.feature_lists.feature_list['position1'].feature.add()
+        pos.int64_list.value.append(pos_val)
+    for pos_val in position2:
+        pos = ex.feature_lists.feature_list['position2'].feature.add()
+        pos.int64_list.value.append(pos_val)
+
+    return ex
+
+
+def maybe_write_tfrecord(raw_data, filename):
+    '''if the destination file is not exist on disk, convert the raw_data to
+    tf.trian.SequenceExample and write to file.
+
+    Args:
+      raw_data: a list of 'Raw_Example'
+    '''
+    if not os.path.exists(filename):
+        writer = tf.python_io.TFRecordWriter(filename)
+        for raw_example in raw_data:
+            example = build_sequence_example(raw_example)
+            writer.write(example.SerializeToString())
+        writer.close()
+
+
+def _parse_tfexample(serialized_example):
+    '''parse serialized tf.train.SequenceExample to tensors
+    context features : lexical, rid, direction (mtl)
+    sequence features: sentence, position1, position2
+    '''
+    context_features = {
+        'lexical': tf.FixedLenFeature([6], tf.int64),
+        'rid': tf.FixedLenFeature([], tf.int64)}
+    sequence_features = {
+        'sentence': tf.FixedLenSequenceFeature([], tf.int64),
+        'position1': tf.FixedLenSequenceFeature([], tf.int64),
+        'position2': tf.FixedLenSequenceFeature([], tf.int64)}
+    context_dict, sequence_dict = tf.parse_single_sequence_example(
+        serialized_example,
+        context_features=context_features,
+        sequence_features=sequence_features)
+
+    sentence = sequence_dict['sentence']
+    position1 = sequence_dict['position1']
+    position2 = sequence_dict['position2']
+
+    lexical = context_dict['lexical']
+    rid = context_dict['rid']
+
+    return lexical, rid, sentence, position1, position2
+
+
+def read_tfrecord_to_batch(filename, epoch, batch_size, pad_value, shuffle=True):
+    '''read TFRecord file to get batch tensors for tensorflow models
+
+    Returns:
+      a tuple of batched tensors
+    '''
+    with tf.device('/cpu:0'):
+        dataset = tf.data.TFRecordDataset([filename])
+        # Parse the record into tensors
+        dataset = dataset.map(_parse_tfexample)
+        dataset = dataset.repeat(epoch)
+        if shuffle:
+            dataset = dataset.shuffle(buffer_size=100)
+
+        # [] for no padding, [None] for padding to maximum length
+        # n = FLAGS.max_len
+        # if FLAGS.model == 'mtl':
+        #   # lexical, rid, direction, sentence, position1, position2
+        #   padded_shapes = ([None,], [], [], [n], [n], [n])
+        # else:
+        #   # lexical, rid, sentence, position1, position2
+        #   padded_shapes = ([None,], [], [n], [n], [n])
+        # pad_value = tf.convert_to_tensor(pad_value)
+        # dataset = dataset.padded_batch(batch_size, padded_shapes,
+        #                                padding_values=pad_value)
+        dataset = dataset.batch(batch_size)
+
+        iterator = dataset.make_one_shot_iterator()
+        batch = iterator.get_next()
+        return batch
+
+
+def get_data():
     train_file = load_raw_data("../data/train.cln")
     test_file = load_raw_data("../data/test.cln")
     maybe_build_vocab(train_file, test_file, "../data/vocab.txt")
@@ -99,6 +280,28 @@ def main():
         "../data/senna_words.lst",
         "../data/embed50.trim.npy"
     )
+
+    map_words_to_id(train_file, vocab2id)
+    map_words_to_id(test_file, vocab2id)
+
+    maybe_write_tfrecord(train_file, "../data/train.tfrecord")
+    maybe_write_tfrecord(test_file, "../data/test.tfrecord")
+
+    pad_value = vocab2id[PAD_WORD]
+
+    train_data = read_tfrecord_to_batch("../data/train.tfrecord",
+                                        200, 100,
+                                        pad_value, shuffle=True)
+    test_data = read_tfrecord_to_batch("../data/train.tfrecord",
+                                       200, 2717,
+                                       pad_value, shuffle=False)
+
+    return train_data, test_data, word_embed
+
+
+def main():
+    d = get_data()
+    print(d)
 
 
 if __name__ == '__main__':
