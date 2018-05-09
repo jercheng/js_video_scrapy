@@ -19,7 +19,7 @@ def get_video_type(video_name):
         return None
 
 
-def get_greater_30(v_id,error_file):
+def get_greater_30(v_id, error_file):
     url = "http://s.video.qq.com/get_playsource?id=" + v_id + "&type=4&range=1-10000&otype=json"
     session = requests.session()
     res = session.get(url).text
@@ -27,16 +27,16 @@ def get_greater_30(v_id,error_file):
     if len(json_re):
 
         json_res = json.loads(json_re[0][:-1])
-        print(url,json_res)
+        print(url, json_res)
 
-        if not json_res['PlaylistItem'] :
+        if not json_res['PlaylistItem']:
             error_file.write(v_id + "\n")
             return None
 
         if 'videoPlayList' in json_res['PlaylistItem']:
             return json_res['PlaylistItem']['videoPlayList']
         else:
-            error_file.write(v_id+"\n")
+            error_file.write(v_id + "\n")
             return None
 
     else:
@@ -45,23 +45,23 @@ def get_greater_30(v_id,error_file):
 
 
 def main():
-    video_time = "20180506"
+    video_time = "20180508"
     mc = MysqlConnect(config)
-    csv_file_1 = open('data/'+video_time + '_video_greater_30.csv', 'w', newline='', encoding="utf-8")
+    csv_file_1 = open('data/' + video_time + '_video_greater_30.csv', 'w', newline='', encoding="utf-8")
     csv_writer_1 = csv.writer(csv_file_1)
-    csv_file_2 = open('data/'+video_time + '_video_type.csv', 'w', newline='', encoding="utf-8")
+    csv_file_2 = open('data/' + video_time + '_video_type.csv', 'w', newline='', encoding="utf-8")
     csv_writer_2 = csv.writer(csv_file_2)
-    error_file = open('data/'+video_time+'error_item','a',encoding='utf-8')
+    error_file = open('data/' + video_time + 'error_item', 'a', encoding='utf-8')
     sql = """select detail_title,detail_pid from tx_jieshaoye where  update_date = """ + video_time + """ and episodes > 30"""
 
     res = mc.exec_query(sql)
     for item in res:
 
-        re_json = get_greater_30(item[1],error_file)
+        re_json = get_greater_30(item[1], error_file)
 
         if not re_json:
             time.sleep(3)
-            re_json = get_greater_30(item[1], error_file) #再请求一次
+            re_json = get_greater_30(item[1], error_file)  # 再请求一次
 
         if not re_json:
             print("error: ", item[0])
@@ -78,7 +78,7 @@ def main():
                         csv_writer_1.writerow([item[0] + ep_item['title'], ep_item['playUrl']])
                     else:
                         csv_writer_1.writerow([ep_item['title'], ep_item['playUrl']])
-    time.sleep(random.randint(1,3))
+    time.sleep(random.randint(1, 3))
     csv_file_1.close()
     csv_file_2.close()
     error_file.close()
