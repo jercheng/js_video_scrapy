@@ -51,7 +51,7 @@ def main():
             print("-------------------------")
         cache_file = open("cache/" + file_name, "a",encoding="utf-8")
         error_file = open("error/" + word_label + "_error", "a", encoding="utf-8")
-        corpus = open("data/" + word_label + "_corpus", "a", encoding="utf-8")
+        corpus = open("data/" + word_label + "_corpus.csv", "a", encoding="utf-8")
 
         words = [item.strip() for item in open("words/"+file_name,"r",encoding="utf-8").readlines()]
         # print(words)
