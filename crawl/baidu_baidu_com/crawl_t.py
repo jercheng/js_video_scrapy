@@ -24,17 +24,20 @@ def get_baike_summary(word, error_file_hander, word_lable):
         print("\033[1;31m ", "发生故障 休息10秒 " " \033[0m")
         time.sleep(10)
         res = requests.get(url, headers=headers).content.decode("utf-8")
-    html = etree.HTML(res)
-    sel = html.xpath("//*[@class='lemma-summary']")
-    title = html.xpath("//*[@class='lemmaWgt-lemmaTitle-title']/h1/text()")
-    if len(sel) and len(title):
-        summary_content = sel[0].xpath('string(.)')
-        title_content = title[0]
-        return [word, title_content, get_clean_string(summary_content)]
+    if res:
+        html = etree.HTML(res)
+        sel = html.xpath("//*[@class='lemma-summary']")
+        title = html.xpath("//*[@class='lemmaWgt-lemmaTitle-title']/h1/text()")
+        if len(sel) and len(title):
+            summary_content = sel[0].xpath('string(.)')
+            title_content = title[0]
+            return [word, title_content, get_clean_string(summary_content)]
+        else:
+            print(word + " " + "no found")
+            error_file_hander.write(word + "\n")
+            error_file_hander.flush()
+            return None
     else:
-        print(word + " " + "no found")
-        error_file_hander.write(word + "\n")
-        error_file_hander.flush()
         return None
 
 
