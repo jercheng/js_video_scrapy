@@ -45,7 +45,7 @@ def get_greater_30(v_id, error_file):
 
 
 def main():
-    video_time = "20180508"
+    video_time = "20180513"
     mc = MysqlConnect(config)
     csv_file_1 = open('data/' + video_time + '_video_greater_30.csv', 'w', newline='', encoding="utf-8")
     csv_writer_1 = csv.writer(csv_file_1)
