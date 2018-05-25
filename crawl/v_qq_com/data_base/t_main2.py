@@ -29,6 +29,12 @@ def get_greater_30(v_id, error_file):
         json_res = json.loads(json_re[0][:-1])
         print(url, json_res)
 
+        try:
+            json_res['PlaylistItem']
+        except:
+            error_file.write(v_id + "\n")
+            return None
+
         if not json_res['PlaylistItem']:
             error_file.write(v_id + "\n")
             return None
